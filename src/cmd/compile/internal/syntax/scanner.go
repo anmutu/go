@@ -178,6 +178,10 @@ redo:
 		}
 		s.tok = _Colon
 
+	case '?':
+		s.nextch()
+		s.tok = _Quest
+
 	case '.':
 		s.nextch()
 		if isDecimal(s.ch) {

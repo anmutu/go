@@ -878,6 +878,49 @@ func (p *parser) binaryExpr(x Expr, prec int) Expr {
 		t.Y = p.binaryExpr(nil, tprec)
 		x = t
 	}
+
+	// After processing binary operators, check for ternary operator
+	// Ternary operator is right-associative: a ? b : c ? d : e  => a ? b : (c ? d : e)
+	// Its precedence (precTernary) should be handled here.
+	// It should only be processed if its precedence is higher than the current context's precedence (prec).
+	if p.tok == _Quest && precTernary > prec {
+		t := new(TernaryExpr)
+		t.pos = x.Pos() // Start position of the ternary expression is the start of its condition
+		t.Cond = x
+
+		t.QuestPos = p.pos()
+		p.next() // Consume '?'
+
+		// Parse the true expression.
+		// The true expression should be parsed with a precedence that allows it to be fully formed
+		// before the ':', but also correctly handle nested ternaries if they were left-associative (which they are not).
+		// For `a ? b ? c : d : e`, `b ? c : d` is the true part of the first ternary.
+		// We pass precTernary so that `b ? c : d` is parsed as a unit.
+		// If true_expr itself is `b + c`, `+` has higher precedence than `precTernary`, so it's fine.
+		t.True = p.binaryExpr(nil, precTernary) // True expression, parse until ':' or lower precedence operator
+
+		if p.tok != _Colon {
+			p.syntaxError("expected ':' in ternary expression")
+			// Create a BadExpr for the false part to maintain AST structure if possible
+			b := p.badExpr()
+			b.pos = p.pos() // Position of the error
+			t.False = b
+			return t // Return the partially formed ternary expression
+		}
+		t.ColonPos = p.pos()
+		p.next() // Consume ':'
+
+		// Parse the false expression.
+		// To ensure right-associativity for `a ? b : c ? d : e` (parsed as `a ? b : (c ? d : e)`),
+		// the false expression `c ? d : e` should be parsed with a precedence that is
+		// slightly lower than `precTernary` itself.
+		// Or more simply, `p.binaryExpr(nil, precTernary -1)` or `p.binaryExpr(nil, 0)` if ternary is lowest.
+		// Given our precedence `_ = iota; precTernary; precOrOr ...`
+		// `precTernary-1` would be `0` (iota's initial value for `_`)
+		t.False = p.binaryExpr(nil, precTernary-1) // Allows right-associative parsing.
+		x = t
+	}
+
 	return x
 }
 

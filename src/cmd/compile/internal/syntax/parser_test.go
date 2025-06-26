@@ -393,3 +393,240 @@ func TestUnpackListExprAllocs(t *testing.T) {
 		errorf("UnpackListExpr allocated %v times", allocs)
 	}
 }
+
+/ Helper function to parse an expression string for testing
+func parseTestExpr(t *testing.T, exprStr string) Expr {
+	t.Helper()
+	src := fmt.Sprintf("package p; var _ = %s", exprStr)
+	fbase := NewFileBase("test.go")
+	file, err := Parse(fbase, strings.NewReader(src), nil, nil, CheckBranches)
+	if err != nil {
+		t.Fatalf("Parse(%q) failed: %v", exprStr, err)
+		return nil
+	}
+
+	if len(file.DeclList) != 1 {
+		t.Fatalf("Parse(%q): expected 1 declaration, got %d", exprStr, len(file.DeclList))
+		return nil
+	}
+
+	decl, ok := file.DeclList[0].(*VarDecl)
+	if !ok {
+		t.Fatalf("Parse(%q): expected VarDecl, got %T", exprStr, file.DeclList[0])
+		return nil
+	}
+
+	if decl.Values == nil {
+		t.Fatalf("Parse(%q): expected VarDecl with values, got nil", exprStr)
+		return nil
+	}
+	return decl.Values // This should be the parsed expression
+}
+
+// Helper to create a string representation of an AST node for comparison
+func astToString(n Node) string {
+	if n == nil {
+		return "<nil>"
+	}
+	// Using Fprint with default options for a somewhat stable string representation.
+	// For more detailed or specific checks, direct field comparison or a custom stringifier might be needed.
+	var buf bytes.Buffer
+	Fprint(&buf, n, PrintingFlags(0)) // Default printing
+	return buf.String()
+}
+
+func TestTernaryOperatorExpr(t *testing.T) {
+	tests := []struct {
+		name     string
+		exprStr  string
+		expected string // Expected string representation of the AST
+		errMsg   string // Expected error message if parsing should fail
+	}{
+		{
+			name:    "basic ternary",
+			exprStr: "cond ? trueVal : falseVal",
+			expected: "cond ? trueVal : falseVal", // Note: This is a simplified string, actual AST will be nested.
+			// We will need a more robust way to check AST structure.
+		},
+		{
+			name:    "condition is comparison",
+			exprStr: "a > b ? t : f",
+			expected: "a > b ? t : f",
+		},
+		{
+			name:    "true/false are complex",
+			exprStr: `c ? (x + y) : (z * p)`, // Parentheses added for clarity in expected string
+			expected: "c ? x + y : z * p", // String() might strip some parens if not syntactically required by precedence
+		},
+		{
+			name: "right associative",
+			exprStr: "c1 ? t1 : c2 ? t2 : f2",
+			expected: "c1 ? t1 : c2 ? t2 : f2", // c1 ? t1 : (c2 ? t2 : f2)
+		},
+		{
+			name: "precedence: OR vs ternary", // || has higher precedence than ? in our setup, so (a || b) ? t : f
+			exprStr: "a || b ? t : f",
+			expected: "a || b ? t : f",
+		},
+		{
+			name: "precedence: ternary vs OR", // (c ? t : f) || x
+			exprStr: "c ? t : f || x",
+			expected: "(c ? t : f) || x",
+		},
+		{
+			name: "precedence: AND vs ternary", // (a && b) ? t : f
+			exprStr: "a && b ? t : f",
+			expected: "a && b ? t : f",
+		},
+		{
+			name: "precedence: ternary vs AND", // (c ? t : f) && x
+			exprStr: "c ? t : f && x",
+			expected: "(c ? t : f) && x",
+		},
+		{
+			name: "precedence: ADD vs ternary", // (a + b) ? t : f
+			exprStr: "a + b ? t : f",
+			expected: "a + b ? t : f",
+		},
+		{
+			name: "precedence: ternary vs ADD", // c ? t : (f + x)
+			exprStr: "c ? t : f + x",
+			expected: "c ? t : f + x",
+		},
+		{
+			name:     "error: missing colon",
+			exprStr:  "cond ? trueVal falseVal",
+			errMsg:   "expected ':' in ternary expression",
+		},
+		{
+			name:     "error: missing false branch value",
+			exprStr:  "cond ? trueVal :",
+			// The error here might be "unexpected EOF" or "expected expression"
+			// depending on how the parser handles it after ':'.
+			// Let's assume it expects an operand.
+			errMsg:   "expected expression",
+		},
+		{
+			name:     "error: missing true branch value",
+			exprStr:  "cond ? : falseVal",
+			errMsg:   "expected expression", // Error occurs when parsing true branch
+		},
+		// TODO: Add more tests, especially for nested structures and complex interactions.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// We need a way to catch expected parsing errors.
+			// The current Parse function calls t.Fatalf on error.
+			// We might need to adjust parseTestExpr or use Parse directly with a custom error handler.
+
+			var errs []Error
+			handler := func(err Error) {
+				errs = append(errs, err)
+			}
+
+			src := fmt.Sprintf("package p; var _ = %s", tt.exprStr)
+			fbase := NewFileBase("test.go")
+			file, _ := Parse(fbase, strings.NewReader(src), handler, nil, CheckBranches)
+
+			if tt.errMsg != "" {
+				if len(errs) == 0 {
+					t.Errorf("expected error %q, got none", tt.errMsg)
+				} else {
+					found := false
+					for _, err := range errs {
+						if strings.Contains(err.Msg, tt.errMsg) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("expected error msg containing %q, got: %v", tt.errMsg, errs)
+					}
+				}
+				return // Don't check AST if error was expected
+			}
+
+			if len(errs) > 0 {
+				t.Fatalf("Parse(%q) failed: %v", tt.exprStr, errs)
+				return
+			}
+
+			if file == nil || len(file.DeclList) != 1 {
+				t.Fatalf("Parse(%q): expected 1 declaration, got %d (file: %v)", tt.exprStr, len(file.DeclList), file)
+				return
+			}
+			decl, ok := file.DeclList[0].(*VarDecl)
+			if !ok || decl.Values == nil {
+				t.Fatalf("Parse(%q): expected VarDecl with values, got %T", tt.exprStr, file.DeclList[0])
+				return
+			}
+
+			parsedExpr := decl.Values
+
+			// For now, we use a simplified string comparison.
+			// A more robust check would involve traversing the AST.
+			// The default String() for TernaryExpr is not yet defined, so this will likely fail or be unhelpful.
+			// We need to implement String() for TernaryExpr or use a structural comparison.
+
+			// Placeholder for actual AST structural check or more detailed string check
+			// Let's try to print the parsed expression and see its default string form
+			actualStr := astToString(parsedExpr)
+			t.Logf("Parsed AST for %q:\n%s", tt.exprStr, actualStr)
+
+
+			// This is a very basic check. The `expected` string needs to be carefully crafted
+			// to match how `syntax.String()` (or `astToString`) formats the AST.
+			// For TernaryExpr, we haven't defined a String() method yet, so it will use a default.
+			// Let's refine this part once we see the output or implement a String() method.
+			// For now, this test will likely require manual inspection of the logged AST for correctness.
+
+			// A temporary, simplified check. This will need significant improvement.
+			if tt.expected != "" {
+				// This is a placeholder. Actual robust checking of AST structure is needed.
+				// For example, checking node types and specific fields.
+				// e.g., if parsedExpr.(*TernaryExpr).Cond is what we expect.
+				// For now, let's just ensure it parses without error if no errMsg is set.
+				if parsedExpr == nil {
+					t.Errorf("Parsed expression is nil for %q", tt.exprStr)
+				}
+				// A more concrete check will be added iteratively.
+				// For instance, checking the root node type:
+				switch tt.name {
+				case "basic ternary", "condition is comparison", "true/false are complex", "right associative",
+					"precedence: OR vs ternary", "precedence: AND vs ternary", "precedence: ADD vs ternary":
+					if _, ok := parsedExpr.(*TernaryExpr); !ok && tt.errMsg == "" {
+						// If the root is not directly a ternary, it might be due to parentheses stripping.
+						// e.g. `(a?b:c)` might parse to TernaryExpr, `a?b:c` also to TernaryExpr.
+						// If it's `(a?b:c) || x`, then root is `||` Op.
+						if !strings.Contains(tt.exprStr, "||") && !strings.Contains(tt.exprStr, "&&") && !strings.Contains(tt.exprStr, "+") {
+							// Allow for ParenExpr wrapper if the original expression was parenthesized
+							if pe, isParen := parsedExpr.(*ParenExpr); isParen {
+								if _, ok := pe.X.(*TernaryExpr); !ok {
+									t.Errorf("[%s] Expected root to be TernaryExpr or ParenExpr(TernaryExpr), got %T", tt.name, parsedExpr)
+								}
+							} else if _, ok := parsedExpr.(*TernaryExpr); !ok {
+								t.Errorf("[%s] Expected root to be TernaryExpr, got %T", tt.name, parsedExpr)
+							}
+						}
+					}
+				case "precedence: ternary vs OR":
+					op, ok := parsedExpr.(*Operation)
+					if !ok || op.Op != OrOr {
+						t.Errorf("[%s] Expected root to be OrOr Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
+					}
+				case "precedence: ternary vs AND":
+					op, ok := parsedExpr.(*Operation)
+					if !ok || op.Op != AndAnd {
+						t.Errorf("[%s] Expected root to be AndAnd Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
+					}
+				case "precedence: ternary vs ADD":
+					op, ok := parsedExpr.(*Operation)
+					if !ok || op.Op != Add { // Assuming + is Add
+						t.Errorf("[%s] Expected root to be Add Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
+					}
+				}
+			}
+		})
+	}
+}

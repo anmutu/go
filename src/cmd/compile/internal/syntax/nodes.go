@@ -310,6 +310,16 @@ type (
 		Elem Expr
 		expr
 	}
+
+	// Cond ? True : False
+	TernaryExpr struct {
+		Cond     Expr
+		QuestPos Pos // position of "?"
+		True     Expr
+		ColonPos Pos // position of ":"
+		False    Expr
+		expr
+	}
 )
 
 type expr struct {

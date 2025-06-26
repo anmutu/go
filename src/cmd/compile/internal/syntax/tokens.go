@@ -68,6 +68,8 @@ const (
 	_Type        // type
 	_Var         // var
 
+	// Ternary operator tokens
+	_Quest // ?
 	// empty line comment to exclude it from .String
 	tokenCount //
 )
@@ -150,7 +152,8 @@ const (
 
 // Operator precedences
 const (
-	_ = iota
+	_           = iota
+	precTernary // 1
 	precOrOr
 	precAndAnd
 	precCmp
