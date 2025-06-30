@@ -352,6 +352,17 @@ func (p *printer) printNode(n Node) {
 
 func (p *printer) printRawNode(n Node) {
 	switch n := n.(type) {
+	//// 在 printer.go 的 printRawNode 函数的 switch n := n.(type) 语句中，添加：
+	//case *TernaryExpr:
+	//	// 为了确保操作数两边的括号被正确处理（如果需要的话），
+	//	// 我们使用 p.expr() 来打印子表达式，而不是直接 p.print(n.Cond)。
+	//	// p.expr() 会考虑操作符优先级并添加必要的括号。
+	//	p.expr(n.Cond)     // 打印条件表达式
+	//	p.stdString(" ? ") // 打印 " ? " (带空格以增加可读性)
+	//	p.expr(n.True)     // 打印 True 分支
+	//	p.stdString(" : ") // 打印 " : " (带空格)
+	//	p.expr(n.False)    // 打印 False 分支
+
 	case nil:
 		// we should not reach here but don't crash
 
@@ -451,6 +462,17 @@ func (p *printer) printRawNode(n Node) {
 			// to control possibly missing parentheses
 			p.print(n.X, blank, n.Op, blank, n.Y)
 		}
+
+	case *TernaryExpr:
+		p.print(n.Cond)     // 打印条件 (Node 类型)
+		p.print(blank)      // 打印空格 (ctrlSymbol 类型)
+		p.print(_Name, "?") // 使用 _Name token 和紧随的字符串 "?" 来打印问号
+		p.print(blank)      // 打印空格
+		p.print(n.True)     // 打印 True 分支 (Node 类型)
+		p.print(blank)      // 打印空格
+		p.print(_Name, ":") // 使用 _Name token 和紧随的字符串 ":" 来打印冒号
+		p.print(blank)      // 打印空格
+		p.print(n.False)    // 打印 False 分支 (Node 类型)
 
 	case *KeyValueExpr:
 		p.print(n.Key, _Colon, blank, n.Value)
@@ -935,6 +957,7 @@ func (p *printer) printParameterList(list []*Field, tok token) {
 // cannot be combined into a valid (value) expression.
 func combinesWithName(x Expr) bool {
 	switch x := x.(type) {
+
 	case *Operation:
 		if x.Y == nil {
 			// name *x.X combines to name*x.X if x.X is not a type element
@@ -950,6 +973,7 @@ func combinesWithName(x Expr) bool {
 		// in case we change parser behavior.
 		// See also go.dev/issues/69206.
 		return !isTypeElem(x.X)
+
 	}
 	return false
 }

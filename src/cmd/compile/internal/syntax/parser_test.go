@@ -394,33 +394,73 @@ func TestUnpackListExprAllocs(t *testing.T) {
 	}
 }
 
-/ Helper function to parse an expression string for testing
-func parseTestExpr(t *testing.T, exprStr string) Expr {
+// Helper function to parse an expression string for testing
+func parseTestExpr(t *testing.T, exprStr string) (expr Expr, errors []Error) {
 	t.Helper()
 	src := fmt.Sprintf("package p; var _ = %s", exprStr)
+	// fbase is important for error reporting if positions matter for your error assertions.
+	// If NewFileBase is problematic or not needed for error message string comparison, this can be simplified.
 	fbase := NewFileBase("test.go")
-	file, err := Parse(fbase, strings.NewReader(src), nil, nil, CheckBranches)
-	if err != nil {
-		t.Fatalf("Parse(%q) failed: %v", exprStr, err)
-		return nil
+
+	var collectedSyntaxErrors []Error
+
+	errh := func(err error) { // Corrected signature: func(err error)
+		if err == nil {
+			return
+		}
+		// Attempt to get specific syntax.Error information if possible
+		if syntaxErr, ok := err.(Error); ok { // Correct type assertion to value type syntax.Error
+			collectedSyntaxErrors = append(collectedSyntaxErrors, syntaxErr)
+		} else {
+			// Fallback for generic errors, or log them if unexpected
+			// t.Logf("parseTestExpr handler received a non-syntax.Error: %T %v", err, err) // 可选的日志输出
+			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: err.Error()}) // Pos 会是零值
+		}
 	}
 
-	if len(file.DeclList) != 1 {
-		t.Fatalf("Parse(%q): expected 1 declaration, got %d", exprStr, len(file.DeclList))
-		return nil
+	file, firstErr := Parse(fbase, strings.NewReader(src), errh, nil, CheckBranches)
+
+	if firstErr != nil && len(collectedSyntaxErrors) == 0 {
+		if syntaxErr, ok := firstErr.(Error); ok {
+			collectedSyntaxErrors = append(collectedSyntaxErrors, syntaxErr)
+		} else {
+			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: firstErr.Error()})
+		}
+	}
+
+	// 检查文件是否成功解析且包含预期的声明结构
+	if file == nil || len(file.DeclList) == 0 {
+		if len(collectedSyntaxErrors) == 0 {
+			errMsg := "Parse produced no declarations"
+			if firstErr != nil {
+				errMsg = fmt.Sprintf("Parse produced no declarations (firstErr: %v)", firstErr)
+			}
+			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: errMsg})
+		}
+		// 即使 decl.Values 可能是 nil，我们也返回收集到的错误
+		// 如果 decl.Values 是 nil，调用者（测试用例）应该检查它并据此失败
+		var varDeclValues Expr // Default to nil
+		if file != nil && len(file.DeclList) > 0 {
+			if decl, ok := file.DeclList[0].(*VarDecl); ok {
+				varDeclValues = decl.Values
+			}
+		}
+		return varDeclValues, collectedSyntaxErrors
 	}
 
 	decl, ok := file.DeclList[0].(*VarDecl)
 	if !ok {
-		t.Fatalf("Parse(%q): expected VarDecl, got %T", exprStr, file.DeclList[0])
-		return nil
+		if len(collectedSyntaxErrors) == 0 {
+			errMsg := fmt.Sprintf("Parse expected VarDecl, got %T", file.DeclList[0])
+			if firstErr != nil {
+				errMsg = fmt.Sprintf("Parse expected VarDecl, got %T (firstErr: %v)", file.DeclList[0], firstErr)
+			}
+			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: errMsg})
+		}
+		return nil, collectedSyntaxErrors
 	}
 
-	if decl.Values == nil {
-		t.Fatalf("Parse(%q): expected VarDecl with values, got nil", exprStr)
-		return nil
-	}
-	return decl.Values // This should be the parsed expression
+	return decl.Values, collectedSyntaxErrors
 }
 
 // Helper to create a string representation of an AST node for comparison
@@ -428,203 +468,201 @@ func astToString(n Node) string {
 	if n == nil {
 		return "<nil>"
 	}
-	// Using Fprint with default options for a somewhat stable string representation.
-	// For more detailed or specific checks, direct field comparison or a custom stringifier might be needed.
 	var buf bytes.Buffer
-	Fprint(&buf, n, PrintingFlags(0)) // Default printing
+	Fprint(&buf, n, 0) // 使用整数 0 代表默认打印模式
 	return buf.String()
 }
 
 func TestTernaryOperatorExpr(t *testing.T) {
 	tests := []struct {
-		name     string
-		exprStr  string
-		expected string // Expected string representation of the AST
-		errMsg   string // Expected error message if parsing should fail
+		name        string
+		exprStr     string
+		expectedAST func(t *testing.T, expr Expr) // 用于细致的AST结构检查 (可选)
+		errMsg      string                        // 期望的错误信息中包含的子串 (如果errMsg非空，则期望有错误)
+		// noError     bool   // 通过errMsg是否为空来隐式判断是否期望没有错误
 	}{
 		{
 			name:    "basic ternary",
 			exprStr: "cond ? trueVal : falseVal",
-			expected: "cond ? trueVal : falseVal", // Note: This is a simplified string, actual AST will be nested.
-			// We will need a more robust way to check AST structure.
+			expectedAST: func(t *testing.T, expr Expr) {
+				if expr == nil {
+					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
+					return
+				}
+				tern, ok := Unparen(expr).(*TernaryExpr) // Unparen 以处理可能的顶层括号
+				if !ok {
+					t.Errorf("FAIL: Test %q: expected TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
+					return
+				}
+				if condName, ok := Unparen(tern.Cond).(*Name); !ok || condName.Value != "cond" {
+					t.Errorf("FAIL: Test %q: expected Cond to be Name 'cond', got %s", t.Name(), astToString(tern.Cond))
+				}
+				if trueName, ok := Unparen(tern.True).(*Name); !ok || trueName.Value != "trueVal" {
+					t.Errorf("FAIL: Test %q: expected True to be Name 'trueVal', got %s", t.Name(), astToString(tern.True))
+				}
+				if falseName, ok := Unparen(tern.False).(*Name); !ok || falseName.Value != "falseVal" {
+					t.Errorf("FAIL: Test %q: expected False to be Name 'falseVal', got %s", t.Name(), astToString(tern.False))
+				}
+			},
 		},
 		{
 			name:    "condition is comparison",
 			exprStr: "a > b ? t : f",
-			expected: "a > b ? t : f",
+			expectedAST: func(t *testing.T, expr Expr) {
+				if expr == nil {
+					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
+					return
+				}
+				tern, ok := Unparen(expr).(*TernaryExpr)
+				if !ok {
+					t.Errorf("FAIL: Test %q: expected TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
+					return
+				}
+				op, ok := Unparen(tern.Cond).(*Operation)
+				if !ok || op.Op != Gtr {
+					t.Errorf("FAIL: Test %q: expected Cond to be Gtr Operation, got %s", t.Name(), astToString(tern.Cond))
+				}
+			},
 		},
 		{
 			name:    "true/false are complex",
-			exprStr: `c ? (x + y) : (z * p)`, // Parentheses added for clarity in expected string
-			expected: "c ? x + y : z * p", // String() might strip some parens if not syntactically required by precedence
+			exprStr: `c ? (x + y) : (z * p)`,
 		},
 		{
-			name: "right associative",
-			exprStr: "c1 ? t1 : c2 ? t2 : f2",
-			expected: "c1 ? t1 : c2 ? t2 : f2", // c1 ? t1 : (c2 ? t2 : f2)
+			name:    "right associative",
+			exprStr: "c1 ? t1 : c2 ? t2 : f2", // c1 ? t1 : (c2 ? t2 : f2)
+			expectedAST: func(t *testing.T, expr Expr) {
+				if expr == nil {
+					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
+					return
+				}
+				tern1, ok := Unparen(expr).(*TernaryExpr)
+				if !ok {
+					t.Errorf("FAIL: Test %q: expected outer TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
+					return
+				}
+				if _, okInner := Unparen(tern1.False).(*TernaryExpr); !okInner {
+					t.Errorf("FAIL: Test %q: expected False branch to be a TernaryExpr for right-associativity, got %s", t.Name(), astToString(tern1.False))
+				}
+			},
 		},
 		{
-			name: "precedence: OR vs ternary", // || has higher precedence than ? in our setup, so (a || b) ? t : f
+			name:    "precedence: OR vs ternary", // (a || b) ? t : f
 			exprStr: "a || b ? t : f",
-			expected: "a || b ? t : f",
+			expectedAST: func(t *testing.T, expr Expr) {
+				if expr == nil {
+					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
+					return
+				}
+				tern, ok := Unparen(expr).(*TernaryExpr)
+				if !ok {
+					t.Errorf("FAIL: Test %q: expected TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
+					return
+				}
+				op, ok := Unparen(tern.Cond).(*Operation)
+				if !ok || op.Op != OrOr {
+					t.Errorf("FAIL: Test %q: expected Cond to be OrOr Operation, got %s", t.Name(), astToString(tern.Cond))
+				}
+			},
 		},
 		{
-			name: "precedence: ternary vs OR", // (c ? t : f) || x
+			name:    "precedence: ternary vs OR", // 我们实际得到的是 c ? t : (f || x)
 			exprStr: "c ? t : f || x",
-			expected: "(c ? t : f) || x",
+			expectedAST: func(t *testing.T, expr Expr) {
+				if expr == nil {
+					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
+					return
+				}
+				tern, ok := Unparen(expr).(*TernaryExpr) // 期望根节点是 TernaryExpr
+				if !ok {
+					t.Fatalf("FAIL: Test %q: expected root to be TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
+				}
+				// 检查 Cond 和 True 是否符合预期 (例如是简单的 Name)
+				if nameC, ok := Unparen(tern.Cond).(*Name); !ok || nameC.Value != "c" {
+					t.Errorf("FAIL: Test %q: expected Cond to be Name 'c', got %s", t.Name(), astToString(tern.Cond))
+				}
+				if nameT, ok := Unparen(tern.True).(*Name); !ok || nameT.Value != "t" {
+					t.Errorf("FAIL: Test %q: expected True to be Name 't', got %s", t.Name(), astToString(tern.True))
+				}
+				// 关键：检查 False 分支是否是一个 || 操作
+				op, ok := Unparen(tern.False).(*Operation)
+				if !ok || op.Op != OrOr {
+					t.Errorf("FAIL: Test %q: expected False branch to be OrOr Operation, got %T (%s)", t.Name(), Unparen(tern.False), astToString(Unparen(tern.False)))
+				}
+				// （可选）进一步检查 op.X (应该是 "f") 和 op.Y (应该是 "x")
+				if nameF, ok := Unparen(op.X).(*Name); !ok || nameF.Value != "f" {
+					t.Errorf("FAIL: Test %q: expected False branch's left operand (X of ||) to be Name 'f', got %s", t.Name(), astToString(op.X))
+				}
+				if nameX, ok := Unparen(op.Y).(*Name); !ok || nameX.Value != "x" {
+					t.Errorf("FAIL: Test %q: expected False branch's right operand (Y of ||) to be Name 'x', got %s", t.Name(), astToString(op.Y))
+				}
+			},
+		},
+		{name: "precedence: AND vs ternary", exprStr: "a && b ? t : f"},
+		{name: "precedence: ternary vs AND", exprStr: "c ? t : f && x"},
+		{name: "precedence: ADD vs ternary", exprStr: "a + b ? t : f"},
+		{name: "precedence: ternary vs ADD", exprStr: "c ? t : f + x"},
+		{
+			name:    "error: missing colon",
+			exprStr: "cond ? trueVal falseVal",
+			errMsg:  "expected ':' in ternary expression",
 		},
 		{
-			name: "precedence: AND vs ternary", // (a && b) ? t : f
-			exprStr: "a && b ? t : f",
-			expected: "a && b ? t : f",
+			name:    "error: missing false branch value",
+			exprStr: "cond ? trueVal :",
+			errMsg:  "expected expression",
 		},
 		{
-			name: "precedence: ternary vs AND", // (c ? t : f) && x
-			exprStr: "c ? t : f && x",
-			expected: "(c ? t : f) && x",
+			name:    "error: missing true branch value",
+			exprStr: "cond ? : falseVal",
+			errMsg:  "expected expression",
 		},
-		{
-			name: "precedence: ADD vs ternary", // (a + b) ? t : f
-			exprStr: "a + b ? t : f",
-			expected: "a + b ? t : f",
-		},
-		{
-			name: "precedence: ternary vs ADD", // c ? t : (f + x)
-			exprStr: "c ? t : f + x",
-			expected: "c ? t : f + x",
-		},
-		{
-			name:     "error: missing colon",
-			exprStr:  "cond ? trueVal falseVal",
-			errMsg:   "expected ':' in ternary expression",
-		},
-		{
-			name:     "error: missing false branch value",
-			exprStr:  "cond ? trueVal :",
-			// The error here might be "unexpected EOF" or "expected expression"
-			// depending on how the parser handles it after ':'.
-			// Let's assume it expects an operand.
-			errMsg:   "expected expression",
-		},
-		{
-			name:     "error: missing true branch value",
-			exprStr:  "cond ? : falseVal",
-			errMsg:   "expected expression", // Error occurs when parsing true branch
-		},
-		// TODO: Add more tests, especially for nested structures and complex interactions.
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We need a way to catch expected parsing errors.
-			// The current Parse function calls t.Fatalf on error.
-			// We might need to adjust parseTestExpr or use Parse directly with a custom error handler.
+			parsedExpr, errs := parseTestExpr(t, tt.exprStr)
 
-			var errs []Error
-			handler := func(err Error) {
-				errs = append(errs, err)
-			}
-
-			src := fmt.Sprintf("package p; var _ = %s", tt.exprStr)
-			fbase := NewFileBase("test.go")
-			file, _ := Parse(fbase, strings.NewReader(src), handler, nil, CheckBranches)
-
-			if tt.errMsg != "" {
+			if tt.errMsg != "" { // Expect an error
 				if len(errs) == 0 {
-					t.Errorf("expected error %q, got none", tt.errMsg)
+					t.Errorf("FAIL: Test %q: expected error containing %q, got no errors. Parsed AST: %s", tt.name, tt.errMsg, astToString(parsedExpr))
 				} else {
 					found := false
 					for _, err := range errs {
-						if strings.Contains(err.Msg, tt.errMsg) {
+						if strings.Contains(err.Msg, tt.errMsg) { // Check our collected Error's Msg field
 							found = true
 							break
 						}
 					}
 					if !found {
-						t.Errorf("expected error msg containing %q, got: %v", tt.errMsg, errs)
-					}
-				}
-				return // Don't check AST if error was expected
-			}
-
-			if len(errs) > 0 {
-				t.Fatalf("Parse(%q) failed: %v", tt.exprStr, errs)
-				return
-			}
-
-			if file == nil || len(file.DeclList) != 1 {
-				t.Fatalf("Parse(%q): expected 1 declaration, got %d (file: %v)", tt.exprStr, len(file.DeclList), file)
-				return
-			}
-			decl, ok := file.DeclList[0].(*VarDecl)
-			if !ok || decl.Values == nil {
-				t.Fatalf("Parse(%q): expected VarDecl with values, got %T", tt.exprStr, file.DeclList[0])
-				return
-			}
-
-			parsedExpr := decl.Values
-
-			// For now, we use a simplified string comparison.
-			// A more robust check would involve traversing the AST.
-			// The default String() for TernaryExpr is not yet defined, so this will likely fail or be unhelpful.
-			// We need to implement String() for TernaryExpr or use a structural comparison.
-
-			// Placeholder for actual AST structural check or more detailed string check
-			// Let's try to print the parsed expression and see its default string form
-			actualStr := astToString(parsedExpr)
-			t.Logf("Parsed AST for %q:\n%s", tt.exprStr, actualStr)
-
-
-			// This is a very basic check. The `expected` string needs to be carefully crafted
-			// to match how `syntax.String()` (or `astToString`) formats the AST.
-			// For TernaryExpr, we haven't defined a String() method yet, so it will use a default.
-			// Let's refine this part once we see the output or implement a String() method.
-			// For now, this test will likely require manual inspection of the logged AST for correctness.
-
-			// A temporary, simplified check. This will need significant improvement.
-			if tt.expected != "" {
-				// This is a placeholder. Actual robust checking of AST structure is needed.
-				// For example, checking node types and specific fields.
-				// e.g., if parsedExpr.(*TernaryExpr).Cond is what we expect.
-				// For now, let's just ensure it parses without error if no errMsg is set.
-				if parsedExpr == nil {
-					t.Errorf("Parsed expression is nil for %q", tt.exprStr)
-				}
-				// A more concrete check will be added iteratively.
-				// For instance, checking the root node type:
-				switch tt.name {
-				case "basic ternary", "condition is comparison", "true/false are complex", "right associative",
-					"precedence: OR vs ternary", "precedence: AND vs ternary", "precedence: ADD vs ternary":
-					if _, ok := parsedExpr.(*TernaryExpr); !ok && tt.errMsg == "" {
-						// If the root is not directly a ternary, it might be due to parentheses stripping.
-						// e.g. `(a?b:c)` might parse to TernaryExpr, `a?b:c` also to TernaryExpr.
-						// If it's `(a?b:c) || x`, then root is `||` Op.
-						if !strings.Contains(tt.exprStr, "||") && !strings.Contains(tt.exprStr, "&&") && !strings.Contains(tt.exprStr, "+") {
-							// Allow for ParenExpr wrapper if the original expression was parenthesized
-							if pe, isParen := parsedExpr.(*ParenExpr); isParen {
-								if _, ok := pe.X.(*TernaryExpr); !ok {
-									t.Errorf("[%s] Expected root to be TernaryExpr or ParenExpr(TernaryExpr), got %T", tt.name, parsedExpr)
-								}
-							} else if _, ok := parsedExpr.(*TernaryExpr); !ok {
-								t.Errorf("[%s] Expected root to be TernaryExpr, got %T", tt.name, parsedExpr)
-							}
+						var msgs []string
+						for _, err := range errs {
+							msgs = append(msgs, err.Error()) // Use Error() for string representation
 						}
+						t.Errorf("FAIL: Test %q: expected error msg containing %q, got: [%s]", tt.name, tt.errMsg, strings.Join(msgs, "; "))
 					}
-				case "precedence: ternary vs OR":
-					op, ok := parsedExpr.(*Operation)
-					if !ok || op.Op != OrOr {
-						t.Errorf("[%s] Expected root to be OrOr Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
+				}
+			} else { // Expect no error (noError is implied if errMsg is empty)
+				if len(errs) > 0 {
+					var msgs []string
+					for _, err := range errs {
+						msgs = append(msgs, err.Error())
 					}
-				case "precedence: ternary vs AND":
-					op, ok := parsedExpr.(*Operation)
-					if !ok || op.Op != AndAnd {
-						t.Errorf("[%s] Expected root to be AndAnd Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
-					}
-				case "precedence: ternary vs ADD":
-					op, ok := parsedExpr.(*Operation)
-					if !ok || op.Op != Add { // Assuming + is Add
-						t.Errorf("[%s] Expected root to be Add Operation, got %T (Op: %v)", tt.name, parsedExpr, op.Op)
-					}
+					t.Errorf("FAIL: Test %q: expected no error, but got: [%s]", tt.name, strings.Join(msgs, "; "))
+				}
+				if parsedExpr == nil && len(errs) == 0 {
+					// This case should ideally be caught by parseTestExpr if it returns nil expr without errors.
+					// However, an explicit check here is a safeguard.
+					t.Errorf("FAIL: Test %q: expected a parsed expression, but got nil with no errors reported by handler", tt.name)
+				}
+				// If no error is expected, and an AST check function is provided, run it.
+				if tt.expectedAST != nil && parsedExpr != nil {
+					tt.expectedAST(t, parsedExpr)
+				}
+				// Log for successful non-error cases if verbose, and if no AST check failed.
+				// We check t.Failed() to see if any t.Error/t.Fatal was called by expectedAST.
+				if len(errs) == 0 && parsedExpr != nil && !t.Failed() {
+					t.Logf("PASS: Test %q. Parsed AST for %q:\n%s", tt.name, tt.exprStr, astToString(parsedExpr))
 				}
 			}
 		})
