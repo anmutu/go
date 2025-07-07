@@ -354,6 +354,12 @@ func (check *Checker) updateExprType(x syntax.Expr, typ Type, final bool) {
 			check.updateExprType(x.Y, typ, final)
 		}
 
+	case *syntax.TernaryExpr:
+		// Only update the True and False branches to the target type
+		// The condition should remain boolean
+		check.updateExprType(x.True, typ, final)
+		check.updateExprType(x.False, typ, final)
+
 	default:
 		panic("unreachable")
 	}
@@ -393,6 +399,7 @@ func (check *Checker) updateExprType(x syntax.Expr, typ Type, final bool) {
 
 	// Everything's fine, record final type and value for x.
 	check.recordTypeAndValue(x, old.mode, typ, old.val)
+	return
 }
 
 // updateExprVal updates the value of x to val.
@@ -1220,6 +1227,92 @@ func (check *Checker) exprInternal(T *target, x *operand, e syntax.Expr, hint Ty
 		// times the same expression and type are recorded. It is also not a
 		// performance issue because we only reach here for composite literal
 		// types, which are comparatively rare.
+
+	case *syntax.TernaryExpr:
+		var cond operand
+		check.expr(nil, &cond, e.Cond)
+		if !isBoolean(cond.typ) {
+			check.errorf(e.Cond, InvalidSyntaxTree, "condition in ternary must be boolean")
+			goto Error
+		}
+		// Convert untyped bool to bool
+		if isUntyped(cond.typ) && cond.typ.(*Basic).kind == UntypedBool {
+			check.convertUntyped(&cond, Typ[Bool])
+			if cond.mode == invalid {
+				goto Error
+			}
+		}
+		var t1, t2 operand
+		check.expr(nil, &t1, e.True)
+		check.expr(nil, &t2, e.False)
+
+		// Handle type inference for ternary expression
+		if t1.mode == invalid || t2.mode == invalid {
+			goto Error
+		}
+
+		// Handle constant values if all operands are constant
+		if t1.mode == constant_ && t2.mode == constant_ && cond.mode == constant_ {
+			// All operands are constants - evaluate at compile time
+			if constant.BoolVal(cond.val) {
+				x.val = t1.val
+			} else {
+				x.val = t2.val
+			}
+			x.mode = constant_
+		} else {
+			// At least one operand is not constant - result is not constant
+			x.val = nil
+			x.mode = value
+		}
+
+		// Determine the result type
+		if Identical(t1.typ, t2.typ) {
+			x.typ = t1.typ
+		} else if isUntyped(t1.typ) && isUntyped(t2.typ) {
+			// Both are untyped - find common untyped type
+			if t1.typ.(*Basic).kind == t2.typ.(*Basic).kind {
+				// Same untyped kind
+				x.typ = t1.typ
+			} else {
+				// Different untyped kinds - try to find a common type
+				// For numeric types, promote to the more general type
+				if isNumeric(t1.typ) && isNumeric(t2.typ) {
+					if t1.typ.(*Basic).kind == UntypedFloat || t2.typ.(*Basic).kind == UntypedFloat {
+						x.typ = Typ[UntypedFloat]
+					} else if t1.typ.(*Basic).kind == UntypedComplex || t2.typ.(*Basic).kind == UntypedComplex {
+						x.typ = Typ[UntypedComplex]
+					} else {
+						x.typ = Typ[UntypedInt]
+					}
+				} else {
+					check.errorf(e, IncompatibleAssign, "mismatched types %s and %s in ternary expression", t1.typ, t2.typ)
+					goto Error
+				}
+			}
+		} else if isUntyped(t1.typ) {
+			// t1 is untyped, t2 is typed - convert t1 to t2's type
+			check.convertUntyped(&t1, t2.typ)
+			if t1.mode == invalid {
+				goto Error
+			}
+			x.typ = t2.typ
+		} else if isUntyped(t2.typ) {
+			// t2 is untyped, t1 is typed - convert t2 to t1's type
+			check.convertUntyped(&t2, t1.typ)
+			if t2.mode == invalid {
+				goto Error
+			}
+			x.typ = t1.typ
+		} else {
+			// Both are typed but different - this is an error
+			check.errorf(e, IncompatibleAssign, "mismatched types %s and %s in ternary expression", t1.typ, t2.typ)
+			goto Error
+		}
+
+		x.expr = e
+
+		return expression
 
 	default:
 		panic(fmt.Sprintf("%s: unknown expression type %T", atPos(e), e))

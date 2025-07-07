@@ -50,3 +50,27 @@ _testmain.go
 # For files created by specific development environment (e.g. editor),
 # use alternative ways to exclude files from git.
 # For example, set up .git/info/exclude or use a global .gitignore.
+
+# 三元表达式测试文件
+simple.go
+simple2.go
+simple3.go
+simple4.go
+simple5.go
+simple6.go
+test_bool.go
+test_error.go
+test_final.go
+test_here.go
+test_scanner.go
+test_simple.go
+test_ternary.go
+test_ternary_full.go
+
+# Go工作空间文件
+go.work
+go.work.bak
+go.mod
+
+# IDE文件
+.idea/

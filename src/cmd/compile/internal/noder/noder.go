@@ -475,3 +475,5 @@ func checkEmbed(decl *syntax.VarDecl, haveEmbed, withinFunc bool) error {
 		return nil
 	}
 }
+
+

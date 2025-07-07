@@ -175,6 +175,10 @@ func walkExpr1(n ir.Node, init *ir.Nodes) ir.Node {
 		n := n.(*ir.LogicalExpr)
 		return walkLogical(n, init)
 
+	case ir.OTERNARY:
+		n := n.(*ir.TernaryExpr)
+		return walkTernary(n, init)
+
 	case ir.OPRINT, ir.OPRINTLN:
 		return walkPrint(n.(*ir.CallExpr), init)
 
@@ -1132,4 +1136,37 @@ func usefield(n *ir.SelectorExpr) {
 		ir.CurFunc.FieldTrack = make(map[*obj.LSym]struct{})
 	}
 	ir.CurFunc.FieldTrack[sym] = struct{}{}
+}
+
+func walkTernary(n *ir.TernaryExpr, init *ir.Nodes) ir.Node {
+	// Walk all sub-expressions
+	n.Cond = walkExpr(n.Cond, init)
+	n.True = walkExpr(n.True, init)
+	n.False = walkExpr(n.False, init)
+
+	// Convert ternary to if-else expression
+	// This transforms: cond ? true_expr : false_expr
+	// Into: if cond { true_expr } else { false_expr }
+
+	// Create a temporary variable to hold the result
+	tmp := typecheck.TempAt(n.Pos(), ir.CurFunc, n.Type())
+
+	// Create the if statement
+	cond := n.Cond
+	ifStmt := ir.NewIfStmt(n.Pos(), cond, nil, nil)
+
+	// True branch: tmp = true_expr
+	trueAssign := ir.NewAssignStmt(n.Pos(), tmp, n.True)
+	ifStmt.Body = []ir.Node{trueAssign}
+
+	// False branch: tmp = false_expr
+	falseAssign := ir.NewAssignStmt(n.Pos(), tmp, n.False)
+	ifStmt.Else = []ir.Node{falseAssign}
+
+	// Add declaration and if statement to init
+	init.Append(ir.NewDecl(n.Pos(), ir.ODCL, tmp))
+	init.Append(ifStmt)
+
+	// Return the temporary variable
+	return tmp
 }

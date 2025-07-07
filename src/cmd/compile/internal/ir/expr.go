@@ -1264,3 +1264,24 @@ func MethodExprFunc(n Node) *types.Field {
 	base.Fatalf("unexpected node: %v (%v)", n, n.Op())
 	panic("unreachable")
 }
+
+type TernaryExpr struct {
+	miniExpr
+	Cond, True, False Node
+}
+
+func NewTernaryExpr(pos src.XPos, cond, trueExpr, falseExpr Node) *TernaryExpr {
+	n := &TernaryExpr{Cond: cond, True: trueExpr, False: falseExpr}
+	n.SetPos(pos)
+	n.SetOp(OTERNARY)
+	return n
+}
+
+func (n *TernaryExpr) SetOp(op Op) {
+	switch op {
+	default:
+		panic(n.no("SetOp " + op.String()))
+	case OTERNARY:
+		n.op = op
+	}
+}

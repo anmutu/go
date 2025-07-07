@@ -152,15 +152,10 @@ const (
 
 // Operator precedences
 const (
-	_ = iota // 0
-	// Ternary has lower precedence than ||, so it's defined before precOrOr.
-	// Note: C and C++ give ?: higher precedence than assignment but lower than almost everything else.
-	// Java gives ?: lower precedence than || but higher than assignment.
-	// We'll aim for lower than ||.
-	precTernary // 1
-	precOrOr    // 2
-	precAndAnd  // 3
-	precCmp     // 4
-	precAdd     // 5
-	precMul     // 6
+	precTernary = iota + 1 // 1 - Ternary has lowest precedence
+	precOrOr               // 2
+	precAndAnd             // 3
+	precCmp                // 4
+	precAdd                // 5
+	precMul                // 6
 )

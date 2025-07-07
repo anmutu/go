@@ -469,6 +469,10 @@ func typecheck1(n ir.Node, top int) ir.Node {
 		n := n.(*ir.UnaryExpr)
 		return tcUnsafeData(n)
 
+	case ir.OTERNARY:
+		n := n.(*ir.TernaryExpr)
+		return tcTernary(n)
+
 	case ir.OITAB:
 		n := n.(*ir.UnaryExpr)
 		return tcITab(n)

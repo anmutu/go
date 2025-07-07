@@ -51,6 +51,7 @@ const (
 	exprAssert
 	exprUnaryOp
 	exprBinaryOp
+	exprTernaryOp // ternary conditional expression
 	exprCall
 	exprConvert
 	exprNew

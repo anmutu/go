@@ -243,6 +243,7 @@ const (
 	OREAL             // real(X)
 	OIMAG             // imag(X)
 	OCOMPLEX          // complex(X, Y)
+	OTERNARY          // Cond ? True : False (ternary conditional expression)
 	OUNSAFEADD        // unsafe.Add(X, Y)
 	OUNSAFESLICE      // unsafe.Slice(X, Y)
 	OUNSAFESLICEDATA  // unsafe.SliceData(X)

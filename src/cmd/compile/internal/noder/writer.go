@@ -2000,6 +2000,13 @@ func (w *writer) expr(expr syntax.Expr) {
 		w.pos(expr)
 		w.implicitConvExpr(commonType, expr.Y)
 
+	case *syntax.TernaryExpr:
+		w.Code(exprTernaryOp)
+		w.expr(expr.Cond)
+		w.pos(expr)
+		w.expr(expr.True)
+		w.expr(expr.False)
+
 	case *syntax.CallExpr:
 		tv := w.p.typeAndValue(expr.Fun)
 		if tv.IsType() {

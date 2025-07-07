@@ -914,3 +914,45 @@ func tcUnaryArith(n *ir.UnaryExpr) ir.Node {
 	n.SetType(t)
 	return n
 }
+
+func tcTernary(n *ir.TernaryExpr) ir.Node {
+	n.Cond = Expr(n.Cond)
+	n.True = Expr(n.True)
+	n.False = Expr(n.False)
+
+	if n.Cond.Type() == nil || n.True.Type() == nil || n.False.Type() == nil {
+		n.SetType(nil)
+		return n
+	}
+
+	// Convert untyped bool condition to bool
+	n.Cond = DefaultLit(n.Cond, types.Types[types.TBOOL])
+	if n.Cond.Type() == nil {
+		n.SetType(nil)
+		return n
+	}
+
+	// Check that condition is boolean
+	if !n.Cond.Type().IsBoolean() {
+		base.Errorf("non-boolean condition in ternary expression")
+		n.SetType(nil)
+		return n
+	}
+
+	// Use defaultlit2 to find common type between true and false branches
+	n.True, n.False = defaultlit2(n.True, n.False, false)
+	if n.True.Type() == nil || n.False.Type() == nil {
+		n.SetType(nil)
+		return n
+	}
+
+	// After defaultlit2, types should be compatible
+	if !types.Identical(n.True.Type(), n.False.Type()) {
+		base.Errorf("mismatched types in ternary expression: %v and %v", n.True.Type(), n.False.Type())
+		n.SetType(nil)
+		return n
+	}
+
+	n.SetType(n.True.Type())
+	return n
+}
