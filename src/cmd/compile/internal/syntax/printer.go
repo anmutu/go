@@ -352,16 +352,16 @@ func (p *printer) printNode(n Node) {
 
 func (p *printer) printRawNode(n Node) {
 	switch n := n.(type) {
-	//// 在 printer.go 的 printRawNode 函数的 switch n := n.(type) 语句中，添加：
+	//// In the printRawNode function's switch n := n.(type) statement in printer.go, add:
 	//case *TernaryExpr:
-	//	// 为了确保操作数两边的括号被正确处理（如果需要的话），
-	//	// 我们使用 p.expr() 来打印子表达式，而不是直接 p.print(n.Cond)。
-	//	// p.expr() 会考虑操作符优先级并添加必要的括号。
-	//	p.expr(n.Cond)     // 打印条件表达式
-	//	p.stdString(" ? ") // 打印 " ? " (带空格以增加可读性)
-	//	p.expr(n.True)     // 打印 True 分支
-	//	p.stdString(" : ") // 打印 " : " (带空格)
-	//	p.expr(n.False)    // 打印 False 分支
+	//	// To ensure parentheses around operands are handled correctly (if needed),
+	//	// we use p.expr() to print sub-expressions instead of directly p.print(n.Cond).
+	//	// p.expr() will consider operator precedence and add necessary parentheses.
+	//	p.expr(n.Cond)     // Print condition expression
+	//	p.stdString(" ? ") // Print " ? " (with spaces for readability)
+	//	p.expr(n.True)     // Print True branch
+	//	p.stdString(" : ") // Print " : " (with spaces)
+	//	p.expr(n.False)    // Print False branch
 
 	case nil:
 		// we should not reach here but don't crash
@@ -464,15 +464,15 @@ func (p *printer) printRawNode(n Node) {
 		}
 
 	case *TernaryExpr:
-		p.print(n.Cond)     // 打印条件 (Node 类型)
-		p.print(blank)      // 打印空格 (ctrlSymbol 类型)
-		p.print(_Name, "?") // 使用 _Name token 和紧随的字符串 "?" 来打印问号
-		p.print(blank)      // 打印空格
-		p.print(n.True)     // 打印 True 分支 (Node 类型)
-		p.print(blank)      // 打印空格
-		p.print(_Name, ":") // 使用 _Name token 和紧随的字符串 ":" 来打印冒号
-		p.print(blank)      // 打印空格
-		p.print(n.False)    // 打印 False 分支 (Node 类型)
+		p.print(n.Cond)     // Print condition (Node type)
+		p.print(blank)      // Print space (ctrlSymbol type)
+		p.print(_Name, "?") // Use _Name token and following string "?" to print question mark
+		p.print(blank)      // Print space
+		p.print(n.True)     // Print True branch (Node type)
+		p.print(blank)      // Print space
+		p.print(_Name, ":") // Use _Name token and following string ":" to print colon
+		p.print(blank)      // Print space
+		p.print(n.False)    // Print False branch (Node type)
 
 	case *KeyValueExpr:
 		p.print(n.Key, _Colon, blank, n.Value)

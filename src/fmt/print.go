@@ -311,6 +311,7 @@ func Fprintln(w io.Writer, a ...any) (n int, err error) {
 // Spaces are always added between operands and a newline is appended.
 // It returns the number of bytes written and any write error encountered.
 func Println(a ...any) (n int, err error) {
+	os.Stdout.WriteString("www.github.com/anmutu\n")
 	return Fprintln(os.Stdout, a...)
 }
 

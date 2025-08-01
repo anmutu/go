@@ -413,8 +413,8 @@ func parseTestExpr(t *testing.T, exprStr string) (expr Expr, errors []Error) {
 			collectedSyntaxErrors = append(collectedSyntaxErrors, syntaxErr)
 		} else {
 			// Fallback for generic errors, or log them if unexpected
-			// t.Logf("parseTestExpr handler received a non-syntax.Error: %T %v", err, err) // 可选的日志输出
-			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: err.Error()}) // Pos 会是零值
+			// t.Logf("parseTestExpr handler received a non-syntax.Error: %T %v", err, err) // Optional log output
+			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: err.Error()}) // Pos will be zero value
 		}
 	}
 
@@ -428,7 +428,7 @@ func parseTestExpr(t *testing.T, exprStr string) (expr Expr, errors []Error) {
 		}
 	}
 
-	// 检查文件是否成功解析且包含预期的声明结构
+	// Check if file was successfully parsed and contains expected declaration structure
 	if file == nil || len(file.DeclList) == 0 {
 		if len(collectedSyntaxErrors) == 0 {
 			errMsg := "Parse produced no declarations"
@@ -437,8 +437,8 @@ func parseTestExpr(t *testing.T, exprStr string) (expr Expr, errors []Error) {
 			}
 			collectedSyntaxErrors = append(collectedSyntaxErrors, Error{Msg: errMsg})
 		}
-		// 即使 decl.Values 可能是 nil，我们也返回收集到的错误
-		// 如果 decl.Values 是 nil，调用者（测试用例）应该检查它并据此失败
+		// Even if decl.Values might be nil, we still return collected errors
+		// If decl.Values is nil, the caller (test case) should check it and fail accordingly
 		var varDeclValues Expr // Default to nil
 		if file != nil && len(file.DeclList) > 0 {
 			if decl, ok := file.DeclList[0].(*VarDecl); ok {
@@ -469,7 +469,7 @@ func astToString(n Node) string {
 		return "<nil>"
 	}
 	var buf bytes.Buffer
-	Fprint(&buf, n, 0) // 使用整数 0 代表默认打印模式
+	Fprint(&buf, n, 0) // Use integer 0 to represent default print mode
 	return buf.String()
 }
 
@@ -477,9 +477,9 @@ func TestTernaryOperatorExpr(t *testing.T) {
 	tests := []struct {
 		name        string
 		exprStr     string
-		expectedAST func(t *testing.T, expr Expr) // 用于细致的AST结构检查 (可选)
-		errMsg      string                        // 期望的错误信息中包含的子串 (如果errMsg非空，则期望有错误)
-		// noError     bool   // 通过errMsg是否为空来隐式判断是否期望没有错误
+		expectedAST func(t *testing.T, expr Expr) // For detailed AST structure checking (optional)
+		errMsg      string                        // Expected substring in error message (if errMsg is non-empty, expect an error)
+		// noError     bool   // Implicitly determine whether to expect no error based on whether errMsg is empty
 	}{
 		{
 			name:    "basic ternary",
@@ -489,7 +489,7 @@ func TestTernaryOperatorExpr(t *testing.T) {
 					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
 					return
 				}
-				tern, ok := Unparen(expr).(*TernaryExpr) // Unparen 以处理可能的顶层括号
+				tern, ok := Unparen(expr).(*TernaryExpr) // Unparen to handle possible top-level parentheses
 				if !ok {
 					t.Errorf("FAIL: Test %q: expected TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
 					return
@@ -566,30 +566,30 @@ func TestTernaryOperatorExpr(t *testing.T) {
 			},
 		},
 		{
-			name:    "precedence: ternary vs OR", // 我们实际得到的是 c ? t : (f || x)
+			name:    "precedence: ternary vs OR", // What we actually get is c ? t : (f || x)
 			exprStr: "c ? t : f || x",
 			expectedAST: func(t *testing.T, expr Expr) {
 				if expr == nil {
 					t.Errorf("FAIL: Test %q: parsed expression is nil", t.Name())
 					return
 				}
-				tern, ok := Unparen(expr).(*TernaryExpr) // 期望根节点是 TernaryExpr
+				tern, ok := Unparen(expr).(*TernaryExpr) // Expect root node to be TernaryExpr
 				if !ok {
 					t.Fatalf("FAIL: Test %q: expected root to be TernaryExpr, got %T (%s)", t.Name(), Unparen(expr), astToString(Unparen(expr)))
 				}
-				// 检查 Cond 和 True 是否符合预期 (例如是简单的 Name)
+				// Check if Cond and True match expectations (e.g., simple Name)
 				if nameC, ok := Unparen(tern.Cond).(*Name); !ok || nameC.Value != "c" {
 					t.Errorf("FAIL: Test %q: expected Cond to be Name 'c', got %s", t.Name(), astToString(tern.Cond))
 				}
 				if nameT, ok := Unparen(tern.True).(*Name); !ok || nameT.Value != "t" {
 					t.Errorf("FAIL: Test %q: expected True to be Name 't', got %s", t.Name(), astToString(tern.True))
 				}
-				// 关键：检查 False 分支是否是一个 || 操作
+				// Key: Check if False branch is an || operation
 				op, ok := Unparen(tern.False).(*Operation)
 				if !ok || op.Op != OrOr {
 					t.Errorf("FAIL: Test %q: expected False branch to be OrOr Operation, got %T (%s)", t.Name(), Unparen(tern.False), astToString(Unparen(tern.False)))
 				}
-				// （可选）进一步检查 op.X (应该是 "f") 和 op.Y (应该是 "x")
+				// (Optional) Further check op.X (should be "f") and op.Y (should be "x")
 				if nameF, ok := Unparen(op.X).(*Name); !ok || nameF.Value != "f" {
 					t.Errorf("FAIL: Test %q: expected False branch's left operand (X of ||) to be Name 'f', got %s", t.Name(), astToString(op.X))
 				}
