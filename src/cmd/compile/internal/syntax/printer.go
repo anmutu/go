@@ -481,6 +481,11 @@ func (p *printer) printRawNode(n Node) {
 		p.print(blank)       // Print space
 		p.print(n.Right)     // Print right operand
 
+	case *SafeNavigationExpr:
+		p.print(n.X)         // Print base expression
+		p.print(_Name, "?.") // Print "?." operator
+		p.print(n.Sel)       // Print selector name
+
 	case *KeyValueExpr:
 		p.print(n.Key, _Colon, blank, n.Value)
 

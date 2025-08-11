@@ -1199,6 +1199,24 @@ loop:
 				p.advance(_Semi, _Rparen)
 			}
 
+		case _QuestDot:
+			p.next()
+			switch p.tok {
+			case _Name:
+				// pexpr '?.' sym (safe navigation)
+				t := new(SafeNavigationExpr)
+				t.pos = pos
+				t.X = x
+				t.QuestPos = pos
+				t.DotPos = pos
+				t.Sel = p.name()
+				x = t
+
+			default:
+				p.syntaxError("expected name after ?.")
+				p.advance(_Semi, _Rparen)
+			}
+
 		case _Lbrack:
 			p.next()
 

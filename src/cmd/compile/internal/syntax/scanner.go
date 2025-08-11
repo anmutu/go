@@ -185,6 +185,11 @@ redo:
 			s.tok = _QuestQuest
 			break
 		}
+		if s.ch == '.' {
+			s.nextch()
+			s.tok = _QuestDot
+			break
+		}
 		s.tok = _Quest
 
 	case '.':

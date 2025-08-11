@@ -329,6 +329,15 @@ type (
 		Right     Expr
 		expr
 	}
+
+	// X?.Sel (safe navigation)
+	SafeNavigationExpr struct {
+		X        Expr
+		QuestPos Pos // position of "?"
+		DotPos   Pos // position of "."
+		Sel      *Name
+		expr
+	}
 )
 
 type expr struct {

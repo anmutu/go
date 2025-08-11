@@ -1306,3 +1306,25 @@ func (n *NullCoalescingExpr) SetOp(op Op) {
 		n.op = op
 	}
 }
+
+type SafeNavigationExpr struct {
+	miniExpr
+	X   Expr
+	Sel *types.Sym
+}
+
+func NewSafeNavigationExpr(pos src.XPos, x Expr, sel *types.Sym) *SafeNavigationExpr {
+	n := &SafeNavigationExpr{X: x, Sel: sel}
+	n.SetPos(pos)
+	n.SetOp(OSAFENAV)
+	return n
+}
+
+func (n *SafeNavigationExpr) SetOp(op Op) {
+	switch op {
+	default:
+		panic(n.no("SetOp " + op.String()))
+	case OSAFENAV:
+		n.op = op
+	}
+}

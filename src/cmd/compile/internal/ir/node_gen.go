@@ -1771,6 +1771,43 @@ func (n *ReturnStmt) editChildrenWithHidden(edit func(Node) Node) {
 	editNodes(n.Results, edit)
 }
 
+func (n *SafeNavigationExpr) Format(s fmt.State, verb rune) { fmtNode(n, s, verb) }
+func (n *SafeNavigationExpr) copy() Node {
+	c := *n
+	c.init = copyNodes(c.init)
+	return &c
+}
+func (n *SafeNavigationExpr) doChildren(do func(Node) bool) bool {
+	if doNodes(n.init, do) {
+		return true
+	}
+	if n.X != nil && do(n.X) {
+		return true
+	}
+	return false
+}
+func (n *SafeNavigationExpr) doChildrenWithHidden(do func(Node) bool) bool {
+	if doNodes(n.init, do) {
+		return true
+	}
+	if n.X != nil && do(n.X) {
+		return true
+	}
+	return false
+}
+func (n *SafeNavigationExpr) editChildren(edit func(Node) Node) {
+	editNodes(n.init, edit)
+	if n.X != nil {
+		n.X = edit(n.X).(Expr)
+	}
+}
+func (n *SafeNavigationExpr) editChildrenWithHidden(edit func(Node) Node) {
+	editNodes(n.init, edit)
+	if n.X != nil {
+		n.X = edit(n.X).(Expr)
+	}
+}
+
 func (n *SelectStmt) Format(s fmt.State, verb rune) { fmtNode(n, s, verb) }
 func (n *SelectStmt) copy() Node {
 	c := *n

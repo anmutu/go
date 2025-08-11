@@ -73,6 +73,9 @@ const (
 
 	// Null coalescing operator tokens
 	_QuestQuest // ??
+
+	// Safe navigation operator tokens
+	_QuestDot // ?.
 	// empty line comment to exclude it from .String
 	tokenCount //
 )
@@ -162,4 +165,5 @@ const (
 	precCmp                       // 5
 	precAdd                       // 6
 	precMul                       // 7
+	precSafeNav                   // 8 - Safe navigation has highest precedence
 )

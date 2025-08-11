@@ -988,3 +988,29 @@ func tcNullCoalescing(n *ir.NullCoalescingExpr) ir.Node {
 	n.SetType(n.Left.Type())
 	return n
 }
+
+func tcSafeNavigation(n *ir.SafeNavigationExpr) ir.Node {
+	n.X = Expr(n.X).(ir.Expr)
+
+	if n.X.Type() == nil {
+		n.SetType(nil)
+		return n
+	}
+
+	// For safe navigation, we need to check if the base expression is nil
+	// If it's nil, the result should be nil
+	// If it's not nil, we should access the field/method
+
+	// For now, let's handle pointer types
+	if n.X.Type().IsPtr() {
+		// Check if pointer is nil
+		// This will be implemented in the walk phase
+		n.SetType(n.X.Type().Elem())
+		return n
+	}
+
+	// For non-pointer types, this is an error
+	base.Errorf("safe navigation operator ?. can only be used with pointer types")
+	n.SetType(nil)
+	return n
+}

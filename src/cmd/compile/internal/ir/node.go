@@ -245,6 +245,7 @@ const (
 	OCOMPLEX          // complex(X, Y)
 	OTERNARY          // Cond ? True : False (ternary conditional expression)
 	ONULLCOALESCE     // Left ?? Right (null coalescing expression)
+	OSAFENAV          // X?.Sel (safe navigation expression)
 	OUNSAFEADD        // unsafe.Add(X, Y)
 	OUNSAFESLICE      // unsafe.Slice(X, Y)
 	OUNSAFESLICEDATA  // unsafe.SliceData(X)

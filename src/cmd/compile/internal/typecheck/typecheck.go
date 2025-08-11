@@ -477,6 +477,10 @@ func typecheck1(n ir.Node, top int) ir.Node {
 		n := n.(*ir.NullCoalescingExpr)
 		return tcNullCoalescing(n)
 
+	case ir.OSAFENAV:
+		n := n.(*ir.SafeNavigationExpr)
+		return tcSafeNavigation(n)
+
 	case ir.OITAB:
 		n := n.(*ir.UnaryExpr)
 		return tcITab(n)
