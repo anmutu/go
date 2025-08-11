@@ -70,6 +70,9 @@ const (
 
 	// Ternary operator tokens
 	_Quest // ?
+
+	// Null coalescing operator tokens
+	_QuestQuest // ??
 	// empty line comment to exclude it from .String
 	tokenCount //
 )
@@ -152,10 +155,11 @@ const (
 
 // Operator precedences
 const (
-	precTernary = iota + 1 // 1 - Ternary has lowest precedence
-	precOrOr               // 2
-	precAndAnd             // 3
-	precCmp                // 4
-	precAdd                // 5
-	precMul                // 6
+	precNullCoalescing = iota + 1 // 1 - Null coalescing has lowest precedence
+	precTernary                   // 2 - Ternary has second lowest precedence
+	precOrOr                      // 3
+	precAndAnd                    // 4
+	precCmp                       // 5
+	precAdd                       // 6
+	precMul                       // 7
 )

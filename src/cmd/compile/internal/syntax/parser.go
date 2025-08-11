@@ -879,7 +879,24 @@ func (p *parser) binaryExpr(x Expr, prec int) Expr {
 		x = t
 	}
 
-	// After processing binary operators, check for ternary operator
+	// After processing binary operators, check for null coalescing operator
+	// Null coalescing operator is left-associative: a ?? b ?? c  => (a ?? b) ?? c
+	// Its precedence (precNullCoalescing) should be handled here.
+	if p.tok == _QuestQuest && precNullCoalescing > prec {
+		t := new(NullCoalescingExpr)
+		t.pos = x.Pos() // Start position of the null coalescing expression is the start of its left operand
+		t.Left = x
+
+		t.QuestPos = p.pos()
+		t.Quest2Pos = p.pos() // Both question marks are at the same position since they form one token
+		p.next()              // Consume '??'
+
+		// Parse the right expression with the same precedence to allow left-associativity
+		t.Right = p.binaryExpr(nil, precNullCoalescing)
+		x = t
+	}
+
+	// After processing null coalescing operators, check for ternary operator
 	// Ternary operator is right-associative: a ? b : c ? d : e  => a ? b : (c ? d : e)
 	// Its precedence (precTernary) should be handled here.
 	// It should only be processed if its precedence is higher than the current context's precedence (prec).

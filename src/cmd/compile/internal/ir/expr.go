@@ -1285,3 +1285,24 @@ func (n *TernaryExpr) SetOp(op Op) {
 		n.op = op
 	}
 }
+
+type NullCoalescingExpr struct {
+	miniExpr
+	Left, Right Node
+}
+
+func NewNullCoalescingExpr(pos src.XPos, left, right Node) *NullCoalescingExpr {
+	n := &NullCoalescingExpr{Left: left, Right: right}
+	n.SetPos(pos)
+	n.SetOp(ONULLCOALESCE)
+	return n
+}
+
+func (n *NullCoalescingExpr) SetOp(op Op) {
+	switch op {
+	default:
+		panic(n.no("SetOp " + op.String()))
+	case ONULLCOALESCE:
+		n.op = op
+	}
+}

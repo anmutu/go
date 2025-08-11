@@ -473,6 +473,10 @@ func typecheck1(n ir.Node, top int) ir.Node {
 		n := n.(*ir.TernaryExpr)
 		return tcTernary(n)
 
+	case ir.ONULLCOALESCE:
+		n := n.(*ir.NullCoalescingExpr)
+		return tcNullCoalescing(n)
+
 	case ir.OITAB:
 		n := n.(*ir.UnaryExpr)
 		return tcITab(n)

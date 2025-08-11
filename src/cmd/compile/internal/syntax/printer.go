@@ -474,6 +474,13 @@ func (p *printer) printRawNode(n Node) {
 		p.print(blank)      // Print space
 		p.print(n.False)    // Print False branch (Node type)
 
+	case *NullCoalescingExpr:
+		p.print(n.Left)      // Print left operand
+		p.print(blank)       // Print space
+		p.print(_Name, "??") // Print "??" operator
+		p.print(blank)       // Print space
+		p.print(n.Right)     // Print right operand
+
 	case *KeyValueExpr:
 		p.print(n.Key, _Colon, blank, n.Value)
 

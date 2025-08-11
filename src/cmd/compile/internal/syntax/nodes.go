@@ -320,6 +320,15 @@ type (
 		False    Expr
 		expr
 	}
+
+	// Left ?? Right (null coalescing)
+	NullCoalescingExpr struct {
+		Left      Expr
+		QuestPos  Pos // position of first "?"
+		Quest2Pos Pos // position of second "?"
+		Right     Expr
+		expr
+	}
 )
 
 type expr struct {

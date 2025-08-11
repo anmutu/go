@@ -2360,6 +2360,12 @@ func (r *reader) expr() (res ir.Node) {
 		falseExpr := r.expr()
 		return typecheck.Expr(ir.NewTernaryExpr(pos, cond, trueExpr, falseExpr))
 
+	case exprNullCoalesceOp:
+		left := r.expr()
+		pos := r.pos()
+		right := r.expr()
+		return typecheck.Expr(ir.NewNullCoalescingExpr(pos, left, right))
+
 	case exprRecv:
 		x := r.expr()
 		pos := r.pos()

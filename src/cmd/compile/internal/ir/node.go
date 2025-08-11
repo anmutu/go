@@ -244,6 +244,7 @@ const (
 	OIMAG             // imag(X)
 	OCOMPLEX          // complex(X, Y)
 	OTERNARY          // Cond ? True : False (ternary conditional expression)
+	ONULLCOALESCE     // Left ?? Right (null coalescing expression)
 	OUNSAFEADD        // unsafe.Add(X, Y)
 	OUNSAFESLICE      // unsafe.Slice(X, Y)
 	OUNSAFESLICEDATA  // unsafe.SliceData(X)

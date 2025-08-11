@@ -956,3 +956,35 @@ func tcTernary(n *ir.TernaryExpr) ir.Node {
 	n.SetType(n.True.Type())
 	return n
 }
+
+func tcNullCoalescing(n *ir.NullCoalescingExpr) ir.Node {
+	n.Left = Expr(n.Left)
+	n.Right = Expr(n.Right)
+
+	if n.Left.Type() == nil || n.Right.Type() == nil {
+		n.SetType(nil)
+		return n
+	}
+
+	// For null coalescing, we need to check if the left operand is "empty"
+	// For strings, this means checking if it's empty string
+	// For other types, we'll need to implement appropriate checks
+
+	// For now, let's handle strings (empty string check)
+	if n.Left.Type().IsString() {
+		// Check if left operand is empty string
+		if ir.IsConst(n.Left, constant.String) && constant.StringVal(n.Left.Val()) == "" {
+			// Left is empty string, use right operand
+			n.SetType(n.Right.Type())
+			return n.Right
+		}
+		// Left is not empty, use left operand
+		n.SetType(n.Left.Type())
+		return n.Left
+	}
+
+	// For other types, we'll need to implement appropriate empty checks
+	// For now, just use the left operand's type
+	n.SetType(n.Left.Type())
+	return n
+}

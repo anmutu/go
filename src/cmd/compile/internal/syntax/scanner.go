@@ -180,6 +180,11 @@ redo:
 
 	case '?':
 		s.nextch()
+		if s.ch == '?' {
+			s.nextch()
+			s.tok = _QuestQuest
+			break
+		}
 		s.tok = _Quest
 
 	case '.':

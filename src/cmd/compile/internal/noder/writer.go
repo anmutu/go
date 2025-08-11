@@ -2007,6 +2007,12 @@ func (w *writer) expr(expr syntax.Expr) {
 		w.expr(expr.True)
 		w.expr(expr.False)
 
+	case *syntax.NullCoalescingExpr:
+		w.Code(exprNullCoalesceOp)
+		w.expr(expr.Left)
+		w.pos(expr)
+		w.expr(expr.Right)
+
 	case *syntax.CallExpr:
 		tv := w.p.typeAndValue(expr.Fun)
 		if tv.IsType() {
